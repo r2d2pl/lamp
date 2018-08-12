@@ -1,0 +1,142 @@
+wordpress-4.9.4.tar.gz
+.my.cnf
+cat .my.cnf
+[client]
+password=toor
+
+---
+- name: WP stack :)
+  hosts: all
+  become: yes
+  become_user: root
+  gather_facts: True
+  vars:
+    mrp: toor
+    wpdbn: WordPressDB
+    wpdbu: user
+    wpdbp: user
+    LAMP_packages:
+      - httpd
+      - mariadb
+      - mariadb-server
+      - php
+      - php-common
+      - php-mysql
+      - php-gd
+      - php-xml
+      - php-mbstring
+      - php-mcrypt
+      - php-xmlrpc
+      - MySQL-python
+    WP_services:
+      - httpd
+      - mariadb
+
+  tasks:
+  - name: install LAMP stack
+    yum:
+      name: "{{ item }}"
+      state: present
+    with_items: "{{ LAMP_packages }}"
+
+  - name: start and enable services
+    service:
+      name: "{{ item }}"
+      state: started
+      enabled: yes
+    with_items: "{{ WP_services }}"
+    #ignore_errors: yes
+
+  - name: cp importnant file :)
+    copy:
+      src: /root/.my.cnf
+      dest: /root/.my.cnf
+      owner: root
+      group: root
+      mode: 0600
+
+  - name: set root password
+    mysql_user: login_password={{ mrp }} check_implicit_admin=yes name=root host={{ item }} password={{ mrp }} state=present
+    with_items:
+      - localhost
+      - 127.0.0.1
+      - ::1
+
+  - name: reload privilege tables
+    command: 'mysql -ne "{{ item }}"'
+    with_items:
+      - FLUSH PRIVILEGES
+    changed_when: False
+
+  #- name: Remove anonymous users
+  #  command: 'mysql -ne "{{ item }}"'
+  #  with_items:
+  #    - DELETE FROM mysql.user WHERE User=''
+  #  changed_when: False
+
+  #- name: Disallow root login remotely
+  #  command: 'mysql -ne "{{ item }}"'
+  #  with_items:
+  #    - DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1')
+  #  changed_when: False
+
+  #- name: Remove test database and access to it
+  #  command: 'mysql -ne "{{ item }}"'
+  #  with_items:
+  #    - DROP DATABASE IF EXISTS test
+  #    - DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%'
+  #  changed_when: False
+
+  #- name: Reload privilege tables
+  #  command: 'mysql -ne "{{ item }}"'
+  #  with_items:
+  #    - FLUSH PRIVILEGES
+  #  changed_when: False
+
+  - name: create WordPress database
+    mysql_db:
+      name: "{{ wpdbn }}"
+      state: present
+      login_user: root
+      login_password: "{{ mrp }}"
+
+  - name: Create WordPress DB user and grant permissions to WordPress DB
+    mysql_user:
+      name: "{{ wpdbu }}"
+      password: "{{ wpdbp }}"
+      priv: "{{ wpdbn }}.*:ALL"
+      state: present
+      login_user: root
+      login_password: "{{ mrp }}"
+
+  - name: exclude WP
+    unarchive:
+      src=/root/wordpress-4.9.4.tar.gz
+      dest=/tmp
+
+  - name: changes for WP
+    shell: |
+      mkdir /tmp/wordpress/wp-content/uploads
+      cp -Ra /tmp/wordpress/* /var/www/html
+      chown -R apache:apache /var/www/html/
+      chmod -R 755 /var/www/html/
+      mv /var/www/html/wp-config-sample.php /var/www/html/wp-config.php
+    #ignore_errors: yes
+
+  - name: Final cut one :)
+    replace:
+      dest: /var/www/html/wp-config.php
+      regexp: "database_name_here"
+      replace: "{{ wpdbn }}"
+
+  - name: Final cut two :)
+    replace:
+      dest: /var/www/html/wp-config.php
+      regexp: "username_here"
+      replace: "{{ wpdbu }}"
+
+  - name: Final cut three :)
+    replace:
+      dest: /var/www/html/wp-config.php
+      regexp: "password_here"
+      replace: "{{ wpdbp }}"
